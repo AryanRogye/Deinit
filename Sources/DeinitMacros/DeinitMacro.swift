@@ -5,11 +5,31 @@ import SwiftSyntaxMacros
 import SwiftDiagnostics
 import Foundation
 
+struct DeinitDiagnostic: DiagnosticMessage {
+    let id: String
+    let message: String
+    var diagnosticID: MessageID {
+        .init(domain: "DeinitMacro", id: id)
+    }
+    let severity: DiagnosticSeverity
+
+    init(message: String, id: String, severity: DiagnosticSeverity) {
+        self.message = message
+        self.id = id
+        self.severity = severity
+    }
+}
 
 private func getBody(
     from declaration: some DeclSyntaxProtocol & WithOptionalCodeBlockSyntax
 ) -> [CodeBlockItemListSyntax.Element] {
     return Array(declaration.body?.statements ?? [])
+}
+
+private func isFinal(
+    on classDecl: ClassDeclSyntax,
+) -> Bool {
+    classDecl.modifiers.contains { $0.name.tokenKind == .keyword(.final) }
 }
 
 public struct DeinitMacro: MemberMacro, ExtensionMacro {
@@ -21,6 +41,9 @@ public struct DeinitMacro: MemberMacro, ExtensionMacro {
         conformingTo protocols: [TypeSyntax],
         in context: some MacroExpansionContext
     ) throws -> [ExtensionDeclSyntax] {
+        guard declaration.is(ClassDeclSyntax.self) else {
+            return []
+        }
         return [
             try ExtensionDeclSyntax(
                 "extension \(type): DeinitTrackable"
@@ -35,13 +58,35 @@ public struct DeinitMacro: MemberMacro, ExtensionMacro {
         in context: some MacroExpansionContext
     ) throws -> [DeclSyntax] {
         guard let classDecl = declaration.as(ClassDeclSyntax.self) else {
+            context.diagnose(
+                Diagnostic(
+                    node: node,
+                    message: DeinitDiagnostic(
+                        message: "@DeinitClass can only be applied to a class",
+                        id: "DeinitClass",
+                        severity: .error
+                    )
+                )
+            )
             return []
+        }
+        if !isFinal(on: classDecl) {
+            context.diagnose(
+                Diagnostic(
+                    node: Syntax(classDecl.name),
+                    message: DeinitDiagnostic(
+                        message: "@DeinitClass This class should be final",
+                        id: "DeinitClass",
+                        severity: .error
+                    )
+                )
+            )
         }
         let className = classDecl.name.text
         return [
             """
-            let deinitObjectName = "\(raw: className)"
-            let deinitIdentifier = DeinitID()
+            public let deinitObjectName = "\(raw: className)"
+            public let deinitIdentifier = DeinitID()
             """
         ]
     }
