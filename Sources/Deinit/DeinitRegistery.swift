@@ -28,9 +28,17 @@ public final class DeinitRegistery: Sendable {
     nonisolated(unsafe) private static var warningDelay: Double = 5
     nonisolated(unsafe) private static var leakDelay: Double = 30
 
+    nonisolated(unsafe) private static var onUpdate: (@MainActor ([String]) -> Void)?
+
     private static let lock = NSLock()
 
     private init() {}
+
+    public static func assignOnUpdate(_ closure: @escaping @MainActor ([String]) -> Void) {
+        lock.withLock {
+            onUpdate = closure
+        }
+    }
 
     /// Set delay in which a warning status will be set for a object that should be
     /// deallocated
@@ -58,6 +66,23 @@ public final class DeinitRegistery: Sendable {
         }
     }
 
+    /// Internal list function used when we need to call list
+    /// in a function using a lock
+    private static func unsafeList() ->  [String] {
+        trackableObjects.values.map {
+            "\($0.name): \($0.objectIdentifier) [\($0.status)]"
+        }
+    }
+
+    private static func notify() {
+        let (callback, snapshot) = lock.withLock {
+            (onUpdate, onUpdate == nil ? [] : unsafeList())
+        }
+        DispatchQueue.main.async {
+            callback?(snapshot)
+        }
+    }
+
     public static func reset() {
         lock.withLock {
             for id in trackableObjects.keys {
@@ -67,6 +92,7 @@ public final class DeinitRegistery: Sendable {
                 }
             }
         }
+        notify()
     }
 
     /// Returns if the object still exists
@@ -166,6 +192,7 @@ public final class DeinitRegistery: Sendable {
                 lock.withLock {
                     trackableObjects[identifier]?.status = .warning
                 }
+                notify()
 
                 /// This point means that status is a warning
                 /// so now we wait 30 seconds and we collect the
@@ -179,6 +206,7 @@ public final class DeinitRegistery: Sendable {
                 lock.withLock {
                     trackableObjects[identifier]?.status = .leak
                 }
+                notify()
             }
         }
     }
@@ -199,6 +227,7 @@ extension DeinitRegistery {
                 status: .normal
             )
         }
+        notify()
     }
 
     /// This should not be publicly called. This is only called
@@ -211,6 +240,7 @@ extension DeinitRegistery {
                 task.cancel()
             }
         }
+        notify()
     }
 
     public static func _unregister(_ id: UUID) {
@@ -220,6 +250,6 @@ extension DeinitRegistery {
                 task.cancel()
             }
         }
+        notify()
     }
-
 }
