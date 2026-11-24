@@ -10,6 +10,6 @@ import Foundation
 public typealias DeinitID = UUID
 
 public protocol DeinitTrackable: AnyObject {
-    var deinitObjectName: String { get }
-    var deinitIdentifier: UUID { get }
+    nonisolated var deinitObjectName: String { get }
+    nonisolated var deinitIdentifier: UUID { get }
 }
