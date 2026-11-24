@@ -7,10 +7,21 @@
 
 import Foundation
 
-public enum DeinitRegisteryStatus: Sendable {
-    case normal
-    case warning
-    case leak
+public enum DeinitRegisteryStatus: String, Sendable {
+    case normal = "Normal"
+    case warning = "Warning"
+    case leak = "Leak"
+
+    var label: String {
+        switch self {
+        case .normal:
+            "✅"
+        case .warning:
+            "⚠️"
+        case .leak:
+            "🚨"
+        }
+    }
 }
 
 private struct TrackedObject: Sendable {
@@ -28,13 +39,16 @@ public final class DeinitRegistery: Sendable {
     nonisolated(unsafe) private static var warningDelay: Double = 5
     nonisolated(unsafe) private static var leakDelay: Double = 30
 
-    nonisolated(unsafe) private static var onUpdate: (@MainActor ([String]) -> Void)?
+    nonisolated(unsafe) private static var onUpdate: (@MainActor ([ListResult]) -> Void)?
 
     private static let lock = NSLock()
 
     private init() {}
+}
 
-    public static func assignOnUpdate(_ closure: @escaping @MainActor ([String]) -> Void) {
+// MARK: - Setters
+extension DeinitRegistery {
+    public static func assignOnUpdate(_ closure: @escaping @MainActor ([ListResult]) -> Void) {
         lock.withLock {
             onUpdate = closure
         }
@@ -55,6 +69,48 @@ public final class DeinitRegistery: Sendable {
             leakDelay = delay
         }
     }
+}
+
+// MARK: - Helpers
+extension DeinitRegistery {
+
+    /// A snapshot of a tracked object's identity and deallocation status.
+    /// Contains metadata only and does not retain the tracked object.
+    public struct ListResult: Hashable {
+
+        /// The name of the tracked object's type.
+        public let name: String
+
+        /// The unique identifier assigned by the registry.
+        public let id: UUID
+
+        /// The runtime identity of the tracked object.
+        public let objectIdentifier: ObjectIdentifier
+
+        /// The object's deallocation status at the time of retrieval.
+        public let status: String
+    }
+
+    /// Returns a snapshot of all objects currently tracked by the registry.
+    ///
+    /// This operation is thread-safe and does not retain any tracked objects.
+    /// The returned results are unordered and may become outdated as
+    /// objects are registered, deallocated, or change status.
+    ///
+    /// - Returns: An array containing the metadata and deallocation
+    ///   status of each tracked object.
+    public static func detailedList() -> [ListResult] {
+        lock.withLock {
+            trackableObjects.values.map {
+                .init(
+                    name: $0.name,
+                    id: $0.identifier,
+                    objectIdentifier: $0.objectIdentifier,
+                    status: $0.status.rawValue
+                )
+            }
+        }
+    }
 
     /// Lists out all registered objects in the format
     /// "Name: ObjectIdentifier [Status]"
@@ -66,23 +122,8 @@ public final class DeinitRegistery: Sendable {
         }
     }
 
-    /// Internal list function used when we need to call list
-    /// in a function using a lock
-    private static func unsafeList() ->  [String] {
-        trackableObjects.values.map {
-            "\($0.name): \($0.objectIdentifier) [\($0.status)]"
-        }
-    }
-
-    private static func notify() {
-        let (callback, snapshot) = lock.withLock {
-            (onUpdate, onUpdate == nil ? [] : unsafeList())
-        }
-        DispatchQueue.main.async {
-            callback?(snapshot)
-        }
-    }
-
+    /// Function to reset all values stored by the registery
+    /// This should not really be used
     public static func reset() {
         lock.withLock {
             for id in trackableObjects.keys {
@@ -146,7 +187,40 @@ public final class DeinitRegistery: Sendable {
             return trackableObjects.values.filter { $0.status == .warning }.isEmpty == false
         }
     }
+}
 
+// MARK: - Internal Helpers
+extension DeinitRegistery {
+
+    /// Internal list function used when we need to call list
+    /// in a function using a lock
+    private static func unsafeList() ->  [String] {
+        trackableObjects.values.map {
+            "\($0.name): \($0.objectIdentifier) [\($0.status)]"
+        }
+    }
+
+    /// Internal detailed list function used when we need to call detailedList
+    /// in a function using a lock
+    private static func unsafeDetailedList() -> [ListResult] {
+        trackableObjects.values.map {
+            .init(name: $0.name, id: $0.identifier, objectIdentifier: $0.objectIdentifier, status: $0.status.rawValue)
+        }
+    }
+
+    /// calls the `onUpdate` callback if it was set
+    private static func notify() {
+        let (callback, snapshot) = lock.withLock {
+            (onUpdate, onUpdate == nil ? [] : unsafeDetailedList())
+        }
+        DispatchQueue.main.async {
+            callback?(snapshot)
+        }
+    }
+}
+
+// MARK: - Should Deinit
+extension DeinitRegistery {
     /// Begins monitoring an object that is expected to be deallocated.
     ///
     /// If the object remains alive after `warningDelay` seconds, its status is set to
