@@ -119,14 +119,14 @@ public struct DeinitAttachMacro: BodyMacro {
             if existing.isEmpty {
                 existing.insert(
                 """
-                DeinitRegistery._unregister(self)
+                DeinitRegistery._unregister(self.deinitIdentifier)
                 """,
                 at: 0
                 )
             } else {
                 existing.insert(
                 """
-                defer { DeinitRegistery._unregister(self) }
+                defer { DeinitRegistery._unregister(self.deinitIdentifier) }
                 """,
                 at: 0
                 )
