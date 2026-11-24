@@ -7,7 +7,7 @@ import CompilerPluginSupport
 let package = Package(
     name: "Deinit",
     platforms: [
-        .macOS(.v13),
+        .macOS(.v14),
             .iOS(.v15),
             .tvOS(.v15),
             .watchOS(.v9),

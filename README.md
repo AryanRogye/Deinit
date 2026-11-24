@@ -1,6 +1,125 @@
 
 # How To Use
 
+## Tracking A  Class
+
+```swift
+@DeinitClass
+final class Person {
+    let name: String
+
+    @DeinitAttach
+    init(name: String) {
+        self.name = name
+    }
+
+    @DeinitAttach
+    deinit {}
+}
+```
+
+DeinitRegistery automatically tracks the allocation and deallocation of registered objects.
+
+## Tracking Expected Deallocation
+
+Best way to check if an object is going to deallocate
+is to set `DeinitRegistery.shouldDeinit(_)`
+
+- For Example
+```swift
+private func cleanupPeople() {
+    for person in people {
+        DeinitRegistery.shouldDeinit(person)
+    }
+
+    people.removeAll()
+}
+```
+
+## Inspecting Allocations
+
+
+There are two ways to retrieve currently tracked allocations.
+
+### Basic List
+
+```swift
+DeinitRegistery.list()
+```
+
+will return back all allocated objects as a `[String]`
+
+### Detailed List
+
+```swift
+DeinitRegistery.detailedList()
+```
+
+will return back all allocated objects as a `[DeinitRegistery.ListResult]`
+
+- `name`: The object's name.
+- `id`: The object's unique tracking identifier.
+- `objectIdentifier`: The object's identity.
+- `status`: The object's current allocation status.
+
+
+## Checking for Memory Leaks
+
+You can inspect an object's allocation status using its deinitIdentifier.
+
+```swift
+private func cleanupPeople() async {
+    var ids: [UUID] = []
+    for person in people {
+        ids.append(person.deinitIdentifier)
+        DeinitRegistery.shouldDeinit(person)
+    }
+    try? await Task.sleep(for: .seconds(6))
+
+    for id in ids {
+        if let status = DeinitRegistery.status(for: id) {
+            switch status {
+            case .normal:
+                print("Allocated")
+            case .warning:
+                print("Expected deallocation has not occurred")
+            case .leak:
+                print("Potential memory leak")
+            }
+        } else {
+            print("Deallocated")
+        }
+    }
+}
+```
+
+## Configuring Deallocation Delays
+
+The default warning delay is 5 seconds. You can configure it using:
+
+```swift
+DeinitRegistery.setWarningDelay(10)
+```
+
+Similarly, the leak delay default is 30 seconds which can be configured using:
+
+```swift
+DeinitRegistery.setLeakDelay(10)
+```
+
+The warning and leak delays are cumulative. When shouldDeinit(_:) is called, the registry waits for the warning delay before beginning the leak delay.
+
+| Elapsed Time | Status  |
+|--------------|---------|
+| 0 seconds    | Normal  |
+| 10 seconds   | Warning |
+| 20 seconds   | Leak    |
+
+If the object deallocates at any point, it is removed from the registry.
+A leak status indicates that an object has exceeded its expected deallocation time. It does not necessarily confirm a memory leak.
+
+## SwiftUI Integration
+
 TODO
 
 # Usage

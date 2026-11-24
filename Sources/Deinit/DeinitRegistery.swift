@@ -54,6 +54,12 @@ extension DeinitRegistery {
         }
     }
 
+    public static func removeOnUpdate() {
+        lock.withLock {
+            onUpdate = nil
+        }
+    }
+
     /// Set delay in which a warning status will be set for a object that should be
     /// deallocated
     public static func setWarningDelay(_ delay: Double) {
@@ -88,7 +94,7 @@ extension DeinitRegistery {
         public let objectIdentifier: ObjectIdentifier
 
         /// The object's deallocation status at the time of retrieval.
-        public let status: String
+        public let status: DeinitRegisteryStatus
     }
 
     /// Returns a snapshot of all objects currently tracked by the registry.
@@ -106,7 +112,7 @@ extension DeinitRegistery {
                     name: $0.name,
                     id: $0.identifier,
                     objectIdentifier: $0.objectIdentifier,
-                    status: $0.status.rawValue
+                    status: $0.status
                 )
             }
         }
@@ -204,7 +210,7 @@ extension DeinitRegistery {
     /// in a function using a lock
     private static func unsafeDetailedList() -> [ListResult] {
         trackableObjects.values.map {
-            .init(name: $0.name, id: $0.identifier, objectIdentifier: $0.objectIdentifier, status: $0.status.rawValue)
+            .init(name: $0.name, id: $0.identifier, objectIdentifier: $0.objectIdentifier, status: $0.status)
         }
     }
 
