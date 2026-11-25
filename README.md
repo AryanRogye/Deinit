@@ -1,20 +1,40 @@
+Deinit is a package which was created because I wanted to track which 
+classes were still allocated and which classes were deallocated without 
+having to use Xcode's memory debugger or memory graph.
 
+This became really handy in my browser project because I didn't know 
+which `WKWebView`s were still active and which were not.
 
 ## Requirements
 
-| Platform      | Minimum |
-|---------------|---------|
-| iOS           | 15.0+   |
-| macOS         | 14.0+   |
-| watchOS       | 9.0+    |
-| tvOS          | 15.0+   |
-| Mac Catalyst  | 15.0+   |
+| Platform     | Minimum |
+|--------------|---------|
+| iOS          | 17.0+   |
+| macOS        | 14.0+   |
+| watchOS      | 10.0+   |
+| tvOS         | 17.0+   |
+| Mac Catalyst | 17.0+   |
 
-Swift 5.9+ (required for macros)
+Swift 6.2+ (required for macros)
+
+# Installation
+
+```swift
+.package(
+    url: "https://github.com/AryanRogye/Deinit.git",
+    branch: "main"
+)
+```
+
+```swift
+dependencies: [
+    .product(name: "Deinit", package: "Deinit")
+]
+```
 
 # How To Use
 
-## Tracking A  Class
+## Tracking A Class
 
 ```swift
 @DeinitClass
@@ -32,9 +52,9 @@ final class Person {
 ```
 
 DeinitRegistry automatically tracks the allocation and deallocation of registered objects.
-- Class must be final
+- Class must be `final`. Tracking hooks into a single `init` and `deinit`, so the class can't be subclassed.
 - @DeinitAttach must be attached to the init and the deinit
-- One or the other will not work
+- `@DeinitAttach` must be on both init and deinit. Attaching only one won't work."
 
 ## Tracking Expected Deallocation
 
@@ -136,6 +156,16 @@ A leak status indicates that an object has exceeded its expected deallocation ti
 
 ## SwiftUI Integration
 
+`Deinit` ships with `DeinitViewModel`, an observable view model you can use in any view through `DeinitViewModel.shared`.
+
+> **Note:** Tracking starts automatically the first time you access `DeinitViewModel.shared`. To stop it, call:
+>
+> ```swift
+> DeinitViewModel.shared.stopTracking()
+> ```
+
+Here's a simple view that lists every tracked allocation:
+
 ```swift
 struct DeinitView: View {
     @Bindable var vm = DeinitViewModel.shared
@@ -186,20 +216,6 @@ func runInDefaultTerminal(_ command: String, in directory: String? = nil) {
 }
 ```
 
-# Usage
-
-```swift
-.package(
-    url: "https://github.com/AryanRogye/Deinit.git",
-    branch: "main"
-)
-```
-
-```swift
-dependencies: [
-    .product(name: "Deinit", package: "Deinit")
-]
-```
 
 ## Macro Setup in Xcode
 

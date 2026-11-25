@@ -8,10 +8,10 @@ let package = Package(
     name: "Deinit",
     platforms: [
         .macOS(.v14),
-            .iOS(.v15),
-            .tvOS(.v15),
-            .watchOS(.v9),
-            .macCatalyst(.v15)
+        .iOS(.v17),
+        .tvOS(.v17),
+        .watchOS(.v10),
+        .macCatalyst(.v17)
     ],
     products: [
         // Products define the executables and libraries a package produces, making them visible to other packages.
