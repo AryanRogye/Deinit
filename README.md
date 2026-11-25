@@ -216,6 +216,8 @@ func runInDefaultTerminal(_ command: String, in directory: String? = nil) {
 }
 ```
 
+<img width="1309" height="899" alt="PNG image" src="https://github.com/user-attachments/assets/36c3c82e-2c07-497d-aa4f-4e2afcbd3a9c" />
+
 
 ## Macro Setup in Xcode
 
