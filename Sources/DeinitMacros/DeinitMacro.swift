@@ -105,7 +105,7 @@ public struct DeinitAttachMacro: BodyMacro {
 
             existing.insert(
             """
-            DeinitRegistery._register(self)
+            DeinitRegistry._register(self)
             """,
             at: existing.count
             )
@@ -119,14 +119,14 @@ public struct DeinitAttachMacro: BodyMacro {
             if existing.isEmpty {
                 existing.insert(
                 """
-                DeinitRegistery._unregister(self.deinitIdentifier)
+                DeinitRegistry._unregister(self.deinitIdentifier)
                 """,
                 at: 0
                 )
             } else {
                 existing.insert(
                 """
-                defer { DeinitRegistery._unregister(self.deinitIdentifier) }
+                defer { DeinitRegistry._unregister(self.deinitIdentifier) }
                 """,
                 at: 0
                 )

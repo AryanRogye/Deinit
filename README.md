@@ -1,4 +1,17 @@
 
+
+## Requirements
+
+| Platform      | Minimum |
+|---------------|---------|
+| iOS           | 15.0+   |
+| macOS         | 14.0+   |
+| watchOS       | 9.0+    |
+| tvOS          | 15.0+   |
+| Mac Catalyst  | 15.0+   |
+
+Swift 5.9+ (required for macros)
+
 # How To Use
 
 ## Tracking A  Class
@@ -18,18 +31,21 @@ final class Person {
 }
 ```
 
-DeinitRegistery automatically tracks the allocation and deallocation of registered objects.
+DeinitRegistry automatically tracks the allocation and deallocation of registered objects.
+- Class must be final
+- @DeinitAttach must be attached to the init and the deinit
+- One or the other will not work
 
 ## Tracking Expected Deallocation
 
 Best way to check if an object is going to deallocate
-is to set `DeinitRegistery.shouldDeinit(_)`
+is to set `DeinitRegistry.shouldDeinit(_)`
 
 - For Example
 ```swift
 private func cleanupPeople() {
     for person in people {
-        DeinitRegistery.shouldDeinit(person)
+        DeinitRegistry.shouldDeinit(person)
     }
 
     people.removeAll()
@@ -44,7 +60,7 @@ There are two ways to retrieve currently tracked allocations.
 ### Basic List
 
 ```swift
-DeinitRegistery.list()
+DeinitRegistry.list()
 ```
 
 will return back all allocated objects as a `[String]`
@@ -52,10 +68,10 @@ will return back all allocated objects as a `[String]`
 ### Detailed List
 
 ```swift
-DeinitRegistery.detailedList()
+DeinitRegistry.detailedList()
 ```
 
-will return back all allocated objects as a `[DeinitRegistery.ListResult]`
+will return back all allocated objects as a `[DeinitRegistry.ListResult]`
 
 - `name`: The object's name.
 - `id`: The object's unique tracking identifier.
@@ -72,12 +88,12 @@ private func cleanupPeople() async {
     var ids: [UUID] = []
     for person in people {
         ids.append(person.deinitIdentifier)
-        DeinitRegistery.shouldDeinit(person)
+        DeinitRegistry.shouldDeinit(person)
     }
     try? await Task.sleep(for: .seconds(6))
 
     for id in ids {
-        if let status = DeinitRegistery.status(for: id) {
+        if let status = DeinitRegistry.status(for: id) {
             switch status {
             case .normal:
                 print("Allocated")
@@ -98,13 +114,13 @@ private func cleanupPeople() async {
 The default warning delay is 5 seconds. You can configure it using:
 
 ```swift
-DeinitRegistery.setWarningDelay(10)
+DeinitRegistry.setWarningDelay(10)
 ```
 
 Similarly, the leak delay default is 30 seconds which can be configured using:
 
 ```swift
-DeinitRegistery.setLeakDelay(10)
+DeinitRegistry.setLeakDelay(10)
 ```
 
 The warning and leak delays are cumulative. When shouldDeinit(_:) is called, the registry waits for the warning delay before beginning the leak delay.
@@ -120,7 +136,55 @@ A leak status indicates that an object has exceeded its expected deallocation ti
 
 ## SwiftUI Integration
 
-TODO
+```swift
+struct DeinitView: View {
+    @Bindable var vm = DeinitViewModel.shared
+
+    var body: some View {
+        Menu {
+            ForEach(
+                vm.allocationNames.sorted(by: { $0.key < $1.key }),
+                id: \.key
+            ) { name, allocations in
+                Menu {
+                    ForEach(allocations, id: \.id) { allocation in
+                        Text("\(name) - \(allocation.status.rawValue)")
+                    }
+                } label: {
+                    Text("\(name) - \(allocations.count)")
+                }
+            }
+        } label: {
+            Text("Allocations")
+        }
+    }
+}
+```
+
+In a personal app I have the identifier go through this:
+```swift
+let pid = ProcessInfo.processInfo.processIdentifier
+let address = String(describing: allocation.objectIdentifier)
+    .trimmingPrefix("ObjectIdentifier(")
+    .dropLast()
+
+let command = "leaks -traceTree \(address) \(pid)"
+runInDefaultTerminal(command)
+
+func runInDefaultTerminal(_ command: String, in directory: String? = nil) {
+    print("Running Script: \(command)")
+    let cd = directory.map { "cd \"\($0)\"\n" } ?? ""
+    let script = "#!/bin/zsh\n\(cd)\(command)\nexec $SHELL\n"
+
+    let url = FileManager.default.temporaryDirectory
+        .appendingPathComponent("run-\(UUID().uuidString).command")
+
+    try? script.write(to: url, atomically: true, encoding: .utf8)
+    try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
+
+    NSWorkspace.shared.open(url)
+}
+```
 
 # Usage
 

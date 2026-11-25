@@ -1,5 +1,5 @@
 //
-//  DeinitRegistery.swift
+//  DeinitRegistry.swift
 //  Deinit
 //
 //  Created by Aryan Rogye on 11/23/26.
@@ -7,7 +7,7 @@
 
 import Foundation
 
-public enum DeinitRegisteryStatus: String, Sendable {
+public enum DeinitRegistryStatus: String, Sendable {
     case normal = "Normal"
     case warning = "Warning"
     case leak = "Leak"
@@ -28,10 +28,10 @@ private struct TrackedObject: Sendable {
     let identifier: UUID
     let objectIdentifier: ObjectIdentifier
     let name: String
-    var status: DeinitRegisteryStatus
+    var status: DeinitRegistryStatus
 }
 
-public final class DeinitRegistery: Sendable {
+public final class DeinitRegistry: Sendable {
 
     nonisolated(unsafe) private static var trackableObjects: [UUID: TrackedObject] = [:]
     nonisolated(unsafe) private static var shouldDeinitTrackers: [UUID: Task<Void, Never>] = [:]
@@ -47,7 +47,7 @@ public final class DeinitRegistery: Sendable {
 }
 
 // MARK: - Setters
-extension DeinitRegistery {
+extension DeinitRegistry {
     public static func assignOnUpdate(_ closure: @escaping @MainActor ([ListResult]) -> Void) {
         lock.withLock {
             onUpdate = closure
@@ -78,7 +78,7 @@ extension DeinitRegistery {
 }
 
 // MARK: - Helpers
-extension DeinitRegistery {
+extension DeinitRegistry {
 
     /// A snapshot of a tracked object's identity and deallocation status.
     /// Contains metadata only and does not retain the tracked object.
@@ -94,7 +94,7 @@ extension DeinitRegistery {
         public let objectIdentifier: ObjectIdentifier
 
         /// The object's deallocation status at the time of retrieval.
-        public let status: DeinitRegisteryStatus
+        public let status: DeinitRegistryStatus
     }
 
     /// Returns a snapshot of all objects currently tracked by the registry.
@@ -163,7 +163,7 @@ extension DeinitRegistery {
     /// Returns status for the object
     ///
     /// - Parameter object: The object to get the status of
-    public static func status(for object: any DeinitTrackable) -> DeinitRegisteryStatus? {
+    public static func status(for object: any DeinitTrackable) -> DeinitRegistryStatus? {
         lock.withLock {
             return trackableObjects[object.deinitIdentifier]?.status
         }
@@ -172,7 +172,7 @@ extension DeinitRegistery {
     /// Returns status for the object
     ///
     /// - Parameter id: The object id to get the status of
-    public static func status(for id: UUID) -> DeinitRegisteryStatus? {
+    public static func status(for id: UUID) -> DeinitRegistryStatus? {
         lock.withLock {
             return trackableObjects[id]?.status
         }
@@ -196,7 +196,7 @@ extension DeinitRegistery {
 }
 
 // MARK: - Internal Helpers
-extension DeinitRegistery {
+extension DeinitRegistry {
 
     /// Internal list function used when we need to call list
     /// in a function using a lock
@@ -226,7 +226,7 @@ extension DeinitRegistery {
 }
 
 // MARK: - Should Deinit
-extension DeinitRegistery {
+extension DeinitRegistry {
     /// Begins monitoring an object that is expected to be deallocated.
     ///
     /// If the object remains alive after `warningDelay` seconds, its status is set to
@@ -293,7 +293,7 @@ extension DeinitRegistery {
 }
 
 // MARK: - Creation
-extension DeinitRegistery {
+extension DeinitRegistry {
 
     /// This should not be publicly called. This is only called
     /// by a class's init that implements the `DeinitTrackable`

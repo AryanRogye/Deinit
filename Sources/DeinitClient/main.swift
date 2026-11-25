@@ -247,7 +247,7 @@ var currentSuite = ""
 @MainActor func suite(_ name: String) {
     currentSuite = name
     print("\n▶ \(name)")
-    DeinitRegistery.reset()
+    DeinitRegistry.reset()
 }
 
 @MainActor func check(_ condition: Bool, _ message: String, line: Int = #line) {
@@ -265,7 +265,7 @@ func sleep(_ seconds: Double) async {
 }
 
 func registeredCount(named name: String) -> Int {
-    DeinitRegistery.list().filter { $0.hasPrefix("\(name): ") }.count
+    DeinitRegistry.list().filter { $0.hasPrefix("\(name): ") }.count
 }
 
 /// Simulates a screen being dismissed: builds a leaky and a fixed version,
@@ -278,14 +278,14 @@ func leakScenario(_ title: String, make: (_ weakCapture: Bool) -> any DeinitTrac
     let leakyID = leaky!.deinitIdentifier
     let fixedID = fixed!.deinitIdentifier
 
-    DeinitRegistery.shouldDeinit(leaky!)
-    DeinitRegistery.shouldDeinit(fixed!)
+    DeinitRegistry.shouldDeinit(leaky!)
+    DeinitRegistry.shouldDeinit(fixed!)
     leaky = nil
     fixed = nil
 
     await sleep(waitForLeak)
-    check(DeinitRegistery.status(for: leakyID) == .leak, "strong version is flagged as .leak")
-    check(!DeinitRegistery.doesObjectExist(fixedID), "fixed version is freed")
+    check(DeinitRegistry.status(for: leakyID) == .leak, "strong version is flagged as .leak")
+    check(!DeinitRegistry.doesObjectExist(fixedID), "fixed version is freed")
 }
 
 // MARK: - Race Stress Mode
@@ -306,8 +306,8 @@ final class IDBox: @unchecked Sendable {
 
 if CommandLine.arguments.contains("race") {
     print("Race stress: reading status(for:) and calling reset() while trackers write…")
-    DeinitRegistery.setWarningDelay(0.001)
-    DeinitRegistery.setLeakDelay(0.001)
+    DeinitRegistry.setWarningDelay(0.001)
+    DeinitRegistry.setLeakDelay(0.001)
 
     let box = IDBox()
     let deadline = Date().addingTimeInterval(3)
@@ -316,7 +316,7 @@ if CommandLine.arguments.contains("race") {
         var reads = 0
         while Date() < deadline {
             for id in box.current {
-                _ = DeinitRegistery.status(for: id)
+                _ = DeinitRegistry.status(for: id)
                 reads += 1
             }
             await Task.yield()
@@ -330,7 +330,7 @@ if CommandLine.arguments.contains("race") {
         var resets = 0
         while callReset && Date() < deadline {
             try? await Task.sleep(for: .milliseconds(3))
-            DeinitRegistery.reset()
+            DeinitRegistry.reset()
             resets += 1
         }
         return resets
@@ -341,7 +341,7 @@ if CommandLine.arguments.contains("race") {
     while Date() < deadline {
         alive = (0..<200).map { Test(name: "Stress\($0)") }
         box.current = alive.map(\.deinitIdentifier)
-        alive.forEach { DeinitRegistery.shouldDeinit($0) }
+        alive.forEach { DeinitRegistry.shouldDeinit($0) }
         rounds += 1
         await sleep(0.005)
     }
@@ -357,8 +357,8 @@ if CommandLine.arguments.contains("race") {
 // Short delays so the whole run takes a few seconds instead of ~35s.
 let warningDelay = 0.3
 let leakDelay = 0.6
-DeinitRegistery.setWarningDelay(warningDelay)
-DeinitRegistery.setLeakDelay(leakDelay)
+DeinitRegistry.setWarningDelay(warningDelay)
+DeinitRegistry.setLeakDelay(leakDelay)
 
 /// Waits past the warning point, but well before the leak point.
 let waitForWarning = warningDelay + leakDelay / 2
@@ -371,14 +371,14 @@ suite("Registration")
 do {
     let object = Test(name: "Alex")
     let id = object.deinitIdentifier
-    check(DeinitRegistery.doesObjectExist(object), "object is registered after init")
-    check(DeinitRegistery.doesObjectExist(id), "object is registered by id")
-    check(DeinitRegistery.status(for: object) == .normal, "new object has .normal status")
+    check(DeinitRegistry.doesObjectExist(object), "object is registered after init")
+    check(DeinitRegistry.doesObjectExist(id), "object is registered by id")
+    check(DeinitRegistry.status(for: object) == .normal, "new object has .normal status")
     check(object.deinitObjectName == "Test", "deinitObjectName is the class name")
     check(object.name == "Alex", "original init body still runs")
     check(registeredCount(named: "Test") == 1, "list() has exactly one Test entry")
     check(
-        DeinitRegistery.list().first?.hasSuffix("[normal]") == true,
+        DeinitRegistry.list().first?.hasSuffix("[normal]") == true,
         "list() format ends with [normal]"
     )
     withExtendedLifetime(object) {}
@@ -396,10 +396,10 @@ suite("Unregister on dealloc")
 do {
     var object: Test? = Test(name: "Emma")
     let id = object!.deinitIdentifier
-    check(DeinitRegistery.doesObjectExist(id), "exists before release")
+    check(DeinitRegistry.doesObjectExist(id), "exists before release")
     object = nil
-    check(!DeinitRegistery.doesObjectExist(id), "removed after release")
-    check(DeinitRegistery.status(for: id) == nil, "status is nil after release")
+    check(!DeinitRegistry.doesObjectExist(id), "removed after release")
+    check(DeinitRegistry.status(for: id) == nil, "status is nil after release")
 }
 
 suite("Many objects")
@@ -426,13 +426,13 @@ do {
     var early: EarlyReturn? = EarlyReturn(shouldReturnEarly: true)
     let earlyID = early!.deinitIdentifier
     early = nil
-    check(!DeinitRegistery.doesObjectExist(earlyID), "unregistered even when deinit returns early")
+    check(!DeinitRegistry.doesObjectExist(earlyID), "unregistered even when deinit returns early")
     check(EarlyReturn.deinitBodyRan == 0, "early return skipped the rest of the body")
 
     var normal: EarlyReturn? = EarlyReturn(shouldReturnEarly: false)
     let normalID = normal!.deinitIdentifier
     normal = nil
-    check(!DeinitRegistery.doesObjectExist(normalID), "unregistered when deinit runs fully")
+    check(!DeinitRegistry.doesObjectExist(normalID), "unregistered when deinit runs fully")
     check(EarlyReturn.deinitBodyRan == 1, "original deinit body still runs")
 }
 
@@ -440,12 +440,12 @@ suite("shouldDeinit on an object that is freed")
 do {
     var object: Test? = Test(name: "Liam")
     let id = object!.deinitIdentifier
-    DeinitRegistery.shouldDeinit(object!)
+    DeinitRegistry.shouldDeinit(object!)
     object = nil
     await sleep(waitForLeak)
-    check(!DeinitRegistery.doesObjectExist(id), "object is gone")
-    check(!DeinitRegistery.doesAnyWarningsExist(), "no warnings")
-    check(!DeinitRegistery.doesAnyLeaksExist(), "no leaks")
+    check(!DeinitRegistry.doesObjectExist(id), "object is gone")
+    check(!DeinitRegistry.doesAnyWarningsExist(), "no warnings")
+    check(!DeinitRegistry.doesAnyLeaksExist(), "no leaks")
 }
 
 suite("shouldDeinit on an already-freed object")
@@ -456,67 +456,67 @@ do {
     // Can't pass a freed object, so this checks the registry stays clean
     // when nothing is tracked.
     await sleep(waitForWarning)
-    check(!DeinitRegistery.doesObjectExist(id), "freed object never reappears")
-    check(DeinitRegistery.list().isEmpty, "registry is empty")
+    check(!DeinitRegistry.doesObjectExist(id), "freed object never reappears")
+    check(DeinitRegistry.list().isEmpty, "registry is empty")
 }
 
 suite("shouldDeinit on a retained object: normal → warning → leak")
 do {
     var object: Test? = Test(name: "Olivia")
     let id = object!.deinitIdentifier
-    DeinitRegistery.shouldDeinit(object!)
+    DeinitRegistry.shouldDeinit(object!)
 
-    check(DeinitRegistery.status(for: id) == .normal, "starts as .normal")
+    check(DeinitRegistry.status(for: id) == .normal, "starts as .normal")
 
     await sleep(waitForWarning)
-    check(DeinitRegistery.status(for: id) == .warning, "becomes .warning after warningDelay")
-    check(DeinitRegistery.doesAnyWarningsExist(), "doesAnyWarningsExist() is true")
-    check(!DeinitRegistery.doesAnyLeaksExist(), "not a leak yet")
+    check(DeinitRegistry.status(for: id) == .warning, "becomes .warning after warningDelay")
+    check(DeinitRegistry.doesAnyWarningsExist(), "doesAnyWarningsExist() is true")
+    check(!DeinitRegistry.doesAnyLeaksExist(), "not a leak yet")
 
     await sleep(waitForLeak - waitForWarning)
-    check(DeinitRegistery.status(for: id) == .leak, "becomes .leak after leakDelay")
-    check(DeinitRegistery.doesAnyLeaksExist(), "doesAnyLeaksExist() is true")
+    check(DeinitRegistry.status(for: id) == .leak, "becomes .leak after leakDelay")
+    check(DeinitRegistry.doesAnyLeaksExist(), "doesAnyLeaksExist() is true")
     check(
-        DeinitRegistery.list().contains { $0.hasSuffix("[leak]") },
+        DeinitRegistry.list().contains { $0.hasSuffix("[leak]") },
         "list() shows [leak]"
     )
 
     // Calling again on a leaked object should be a no-op.
-    DeinitRegistery.shouldDeinit(object!)
-    check(DeinitRegistery.status(for: id) == .leak, "shouldDeinit again keeps .leak")
+    DeinitRegistry.shouldDeinit(object!)
+    check(DeinitRegistry.status(for: id) == .leak, "shouldDeinit again keeps .leak")
 
     // Releasing it late still unregisters it.
     object = nil
-    check(!DeinitRegistery.doesObjectExist(id), "late release removes it")
-    check(!DeinitRegistery.doesAnyLeaksExist(), "no leaks after late release")
+    check(!DeinitRegistry.doesObjectExist(id), "late release removes it")
+    check(!DeinitRegistry.doesAnyLeaksExist(), "no leaks after late release")
 }
 
 suite("Released between warning and leak")
 do {
     var object: Test? = Test(name: "Noah")
     let id = object!.deinitIdentifier
-    DeinitRegistery.shouldDeinit(object!)
+    DeinitRegistry.shouldDeinit(object!)
 
     await sleep(waitForWarning)
-    check(DeinitRegistery.status(for: id) == .warning, "is .warning")
+    check(DeinitRegistry.status(for: id) == .warning, "is .warning")
 
     object = nil
     await sleep(waitForLeak - waitForWarning)
-    check(!DeinitRegistery.doesObjectExist(id), "gone after release")
-    check(!DeinitRegistery.doesAnyLeaksExist(), "never marked as leak")
+    check(!DeinitRegistry.doesObjectExist(id), "gone after release")
+    check(!DeinitRegistry.doesAnyLeaksExist(), "never marked as leak")
 }
 
 suite("Duplicate shouldDeinit calls")
 do {
     var object: Test? = Test(name: "Sophia")
     let id = object!.deinitIdentifier
-    DeinitRegistery.shouldDeinit(object!)
-    DeinitRegistery.shouldDeinit(object!)
-    DeinitRegistery.shouldDeinit(object!)
+    DeinitRegistry.shouldDeinit(object!)
+    DeinitRegistry.shouldDeinit(object!)
+    DeinitRegistry.shouldDeinit(object!)
     await sleep(waitForWarning)
-    check(DeinitRegistery.status(for: id) == .warning, "still a single normal → warning transition")
+    check(DeinitRegistry.status(for: id) == .warning, "still a single normal → warning transition")
     object = nil
-    check(!DeinitRegistery.doesObjectExist(id), "release cancels tracking")
+    check(!DeinitRegistry.doesObjectExist(id), "release cancels tracking")
 }
 
 suite("Retain cycle is detected as a leak")
@@ -528,17 +528,17 @@ do {
     let aID = a!.deinitIdentifier
     let bID = b!.deinitIdentifier
 
-    DeinitRegistery.shouldDeinit(a!)
-    DeinitRegistery.shouldDeinit(b!)
+    DeinitRegistry.shouldDeinit(a!)
+    DeinitRegistry.shouldDeinit(b!)
     a = nil
     b = nil
 
-    check(DeinitRegistery.doesObjectExist(aID), "A survives release (cycle)")
-    check(DeinitRegistery.doesObjectExist(bID), "B survives release (cycle)")
+    check(DeinitRegistry.doesObjectExist(aID), "A survives release (cycle)")
+    check(DeinitRegistry.doesObjectExist(bID), "B survives release (cycle)")
 
     await sleep(waitForLeak)
-    check(DeinitRegistery.status(for: aID) == .leak, "A marked .leak")
-    check(DeinitRegistery.status(for: bID) == .leak, "B marked .leak")
+    check(DeinitRegistry.status(for: aID) == .leak, "A marked .leak")
+    check(DeinitRegistry.status(for: bID) == .leak, "B marked .leak")
     check(registeredCount(named: "Node") == 2, "list() shows both Nodes")
 }
 
@@ -551,16 +551,16 @@ do {
     let aID = a!.deinitIdentifier
     let bID = b!.deinitIdentifier
 
-    DeinitRegistery.shouldDeinit(a!)
-    DeinitRegistery.shouldDeinit(b!)
+    DeinitRegistry.shouldDeinit(a!)
+    DeinitRegistry.shouldDeinit(b!)
     a!.other = nil // break the cycle
     a = nil
     b = nil
 
     await sleep(waitForLeak)
-    check(!DeinitRegistery.doesObjectExist(aID), "A freed")
-    check(!DeinitRegistery.doesObjectExist(bID), "B freed")
-    check(!DeinitRegistery.doesAnyLeaksExist(), "no leaks")
+    check(!DeinitRegistry.doesObjectExist(aID), "A freed")
+    check(!DeinitRegistry.doesObjectExist(bID), "B freed")
+    check(!DeinitRegistry.doesAnyLeaksExist(), "no leaks")
 }
 
 await leakScenario("closure capturing self") { Downloader(weakCapture: $0) }
@@ -572,14 +572,14 @@ await leakScenario("long-running Task") { LiveFeed(weakCapture: $0) }
 suite("reset()")
 do {
     let kept = Test(name: "Kept")
-    DeinitRegistery.shouldDeinit(kept)
-    DeinitRegistery.reset()
-    check(DeinitRegistery.list().isEmpty, "list() is empty after reset")
-    check(!DeinitRegistery.doesObjectExist(kept), "live object no longer tracked")
+    DeinitRegistry.shouldDeinit(kept)
+    DeinitRegistry.reset()
+    check(DeinitRegistry.list().isEmpty, "list() is empty after reset")
+    check(!DeinitRegistry.doesObjectExist(kept), "live object no longer tracked")
 
     await sleep(waitForLeak)
-    check(!DeinitRegistery.doesAnyWarningsExist(), "reset cancels pending warning")
-    check(!DeinitRegistery.doesAnyLeaksExist(), "reset cancels pending leak")
+    check(!DeinitRegistry.doesAnyWarningsExist(), "reset cancels pending warning")
+    check(!DeinitRegistry.doesAnyLeaksExist(), "reset cancels pending leak")
     withExtendedLifetime(kept) {}
 }
 
